@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#ff5d8f">
+  <title>Julias + och −</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Julias + och −">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- START -->
+  <section id="view-home" class="view active">
+    <header class="home-head">
+      <img class="logo" src="icons/icon-192.png" alt="">
+      <h1>Julias + och −</h1>
+      <button class="chip" data-go="album">⭐ <b id="chip-stars">0</b> &nbsp; 🎁 <b id="chip-stickers">0</b></button>
+    </header>
+    <div id="levels" class="levels"></div>
+    <button id="install-btn" class="big install" hidden>📲 Installera appen</button>
+    <p id="install-help-ios" class="install-help" hidden></p>
+    <p id="install-help" class="install-help" hidden>
+      Tryck på <b>⋮</b> uppe till höger i Chrome och välj <b>Installera app</b> eller <b>Lägg till på startskärmen</b>.
+      <br><small>Använder du Samsung Internet: tryck <b>☰</b> → <b>Lägg till sida på</b> → <b>Startskärm</b>.</small>
+    </p>
+    <div class="toggles">
+      <button id="sound-toggle" class="small-btn"></button>
+      <button id="speak-toggle" class="small-btn"></button>
+    </div>
+  </section>
+
+  <!-- ÖVNING -->
+  <section id="view-play" class="view">
+    <div class="topbar">
+      <button class="back" id="play-quit" aria-label="Tillbaka">‹</button>
+      <div id="play-dots" class="dots"></div>
+      <button id="say" class="say" aria-label="Läs upp">🔈</button>
+    </div>
+    <div id="card" class="card">
+      <div id="question" class="question"></div>
+      <div id="pics" class="pics"></div>
+      <div id="feedback" class="feedback">&nbsp;</div>
+    </div>
+    <button id="help" class="help-btn">💡 Visa bilder</button>
+    <div id="keypad" class="keypad">
+      <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+      <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+      <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+      <button data-k="del" class="k-del" aria-label="Sudda">⌫</button><button data-k="0">0</button><button data-k="ok" class="k-ok" id="k-ok">OK</button>
+    </div>
+  </section>
+
+  <!-- RESULTAT -->
+  <section id="view-result" class="view">
+    <div class="result">
+      <div id="result-stars" class="result-stars"></div>
+      <h2 id="result-title"></h2>
+      <p id="result-text" class="result-text"></p>
+      <div class="sticker-win">
+        <small>Du fick ett klistermärke!</small>
+        <div id="result-sticker" class="sticker-big"></div>
+      </div>
+      <button id="result-again" class="big c2">Spela igen 🔁</button>
+      <button class="big c5" data-go="home">Till start 🏠</button>
+    </div>
+  </section>
+
+  <!-- ALBUM -->
+  <section id="view-album" class="view">
+    <div class="topbar"><button class="back" data-go="home" aria-label="Tillbaka">‹</button><h2>Mina klistermärken</h2></div>
+    <p id="album-count" class="hint"></p>
+    <div id="album-grid" class="album-grid"></div>
+    <button id="reset" class="small-btn danger">Börja om från början</button>
+  </section>
+
+  <div id="confetti"></div>
+  <script src="app.js"></script>
+</body>
+</html>
