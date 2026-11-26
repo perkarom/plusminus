@@ -92,14 +92,33 @@ function nextSticker(owned, rnd = Math.random) {
   return from[Math.floor(rnd() * from.length)];
 }
 
+const WORDS = ['noll', 'ett', 'två', 'tre', 'fyra', 'fem', 'sex', 'sju', 'åtta', 'nio', 'tio',
+  'elva', 'tolv', 'tretton', 'fjorton', 'femton', 'sexton', 'sjutton', 'arton', 'nitton', 'tjugo'];
+const cap = (t) => t[0].toUpperCase() + t.slice(1);
+
+// Text för uppläsningen (och för de inspelade klippen i audio/)
 function speakText(q) {
-  const w = q.op === '+' ? 'plus' : 'minus';
-  if (q.hide === 'b') return `${q.a} plus hur många blir ${q.a + q.b}?`;
-  return `${q.a} ${w} ${q.b}. Hur mycket blir det?`;
+  if (q.hide === 'b') return `${cap(WORDS[q.a])} plus hur många blir ${WORDS[q.a + q.b]}?`;
+  return `Vad blir ${WORDS[q.a]} ${q.op === '+' ? 'plus' : 'minus'} ${WORDS[q.b]}?`;
 }
+function clipName(q) {
+  if (q.hide === 'b') return `k_${q.a}`;
+  return `${q.op === '+' ? 'p' : 'm'}_${q.a}_${q.b}`;
+}
+function revealText(n) { return `Det blir ${WORDS[n]}.`; }
+
+const PRAISE = ['Rätt! 🎉', 'Snyggt! 🌟', 'Jättebra! 💪', 'Toppen! 🥳', 'Superbra! ⭐'];
+const RESULT_TITLES = ['', 'Bra kämpat!', 'Jättebra!', 'Fantastiskt!'];
+const PHRASES = {
+  ratt_0: 'Rätt!', ratt_1: 'Snyggt!', ratt_2: 'Jättebra!', ratt_3: 'Toppen!', ratt_4: 'Superbra!',
+  nastan: 'Nästan! Försök igen.',
+  res_1: 'Bra kämpat!', res_2: 'Jättebra!', res_3: 'Fantastiskt!',
+  upplasning: 'Nu läser jag upp talen.',
+};
 
 if (typeof module !== 'undefined') {
-  module.exports = { LEVELS, STICKERS, allQuestions, buildRound, starsFor, nextSticker, speakText };
+  module.exports = { LEVELS, STICKERS, PHRASES, PRAISE, allQuestions, buildRound, starsFor, nextSticker,
+    speakText, clipName, revealText };
 }
 
 /* ---------- UI ---------- */
@@ -114,7 +133,7 @@ if (typeof document !== 'undefined') {
   data.best = data.best || {};      // nivå-id -> bästa antal stjärnor
   data.stickers = data.stickers || {}; // emoji -> antal
   if (data.sound === undefined) data.sound = true;
-  if (data.speak === undefined) data.speak = false;
+  if (data.speak === undefined) data.speak = true;
   function save() { try { localStorage.setItem(STORE, JSON.stringify(data)); } catch (e) { /* ignorera */ } }
 
   /* Ljud */
@@ -167,7 +186,7 @@ if (typeof document !== 'undefined') {
     pickVoice();
     speechSynthesis.addEventListener?.('voiceschanged', pickVoice);
   }
-  function say(text) {
+  function sayTTS(text) {
     if (!window.speechSynthesis) return;
     try {
       speechSynthesis.cancel();
@@ -178,7 +197,45 @@ if (typeof document !== 'undefined') {
       speechSynthesis.speak(u);
     } catch (e) { /* ingen uppläsning */ }
   }
-  if (!window.speechSynthesis) { $('#say').hidden = true; $('#speak-toggle').hidden = true; }
+
+  // Inspelade klipp (audio/<namn>.mp3) spelas via Web Audio, som redan är upplåst efter första trycket.
+  // Går klippet inte att hämta används telefonens röst istället.
+  const clips = new Map();
+  let voiceSrc = null;
+  let sayToken = 0;
+  function loadClip(name) {
+    if (!clips.has(name)) {
+      const p = fetch(`audio/${name}.mp3`)
+        .then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+        .then((buf) => new Promise((ok, bad) => audio.decodeAudioData(buf, ok, bad)));
+      p.catch(() => clips.delete(name));
+      clips.set(name, p);
+    }
+    return clips.get(name);
+  }
+  function stopVoice() {
+    sayToken++;
+    try { voiceSrc && voiceSrc.stop(); } catch (e) { /* redan slut */ }
+    voiceSrc = null;
+    if (window.speechSynthesis) speechSynthesis.cancel();
+  }
+  async function say(name, text, delay = 0) {
+    stopVoice();
+    const token = sayToken;
+    unlockAudio();
+    try {
+      if (!audio) throw new Error('inget ljud');
+      const buf = await loadClip(name);
+      if (token !== sayToken) return; // något annat har börjat låta
+      const src = audio.createBufferSource();
+      src.buffer = buf;
+      src.connect(audio.destination);
+      src.start(audio.currentTime + delay);
+      voiceSrc = src;
+    } catch (e) {
+      if (token === sayToken) sayTTS(text);
+    }
+  }
 
   /* Vyer */
   function show(name) {
@@ -216,7 +273,7 @@ if (typeof document !== 'undefined') {
   $('#sound-toggle').addEventListener('click', () => { data.sound = !data.sound; save(); renderHome(); });
   $('#speak-toggle').addEventListener('click', () => {
     data.speak = !data.speak; save(); renderHome();
-    if (data.speak) say('Nu läser jag upp talen');
+    if (data.speak) say('upplasning', PHRASES.upplasning);
   });
 
   /* Spelet */
@@ -239,7 +296,7 @@ if (typeof document !== 'undefined') {
   function stopGame() {
     clearTimeout(timer);
     game = null;
-    if (window.speechSynthesis) speechSynthesis.cancel();
+    stopVoice();
   }
   const cur = () => game.queue[game.idx];
 
@@ -253,7 +310,7 @@ if (typeof document !== 'undefined') {
     $('#k-ok').textContent = 'OK';
     renderQuestion();
     renderDots();
-    if (data.speak) say(speakText(cur()));
+    if (data.speak) say(clipName(cur()), speakText(cur()));
   }
 
   function renderDots() {
@@ -302,7 +359,7 @@ if (typeof document !== 'undefined') {
   }
 
   $('#help').addEventListener('click', () => { if (game) { game.showPics = true; renderQuestion(); } });
-  $('#say').addEventListener('click', () => { if (game) say(speakText(cur())); });
+  $('#say').addEventListener('click', () => { if (game) say(clipName(cur()), speakText(cur())); });
 
   function press(k) {
     if (!game || game.locked) return;
@@ -324,8 +381,6 @@ if (typeof document !== 'undefined') {
     else if (e.key === 'Enter') press('ok');
   });
 
-  const PRAISE = ['Rätt! 🎉', 'Snyggt! 🌟', 'Jättebra! 💪', 'Toppen! 🥳', 'Superbra! ⭐'];
-
   function submit() {
     const q = cur();
     if (game.reveal) return advance();
@@ -335,10 +390,12 @@ if (typeof document !== 'undefined') {
       game.results[game.idx] = game.tries === 0 ? 'first' : 'later';
       if (game.tries === 0) game.firstTry++;
       card.className = 'card right bump';
-      $('#feedback').textContent = PRAISE[Math.floor(Math.random() * PRAISE.length)];
+      const pi = Math.floor(Math.random() * PRAISE.length);
+      $('#feedback').textContent = PRAISE[pi];
       sndRight();
+      if (data.speak) say('ratt_' + pi, PHRASES['ratt_' + pi], 0.3);
       game.locked = true;
-      timer = setTimeout(() => { game.locked = false; advance(); }, 1000);
+      timer = setTimeout(() => { game.locked = false; advance(); }, data.speak ? 1400 : 1000);
       return;
     }
     game.tries++;
@@ -346,6 +403,7 @@ if (typeof document !== 'undefined') {
     card.className = 'card wrong';
     if (game.tries === 1) {
       $('#feedback').textContent = 'Nästan! Försök igen 💪';
+      if (data.speak) say('nastan', PHRASES.nastan, 0.3);
       game.input = '';
       game.showPics = true; // hjälp: visa bilderna
       renderQuestion();
@@ -355,6 +413,7 @@ if (typeof document !== 'undefined') {
       game.showPics = true;
       card.className = 'card reveal';
       $('#feedback').textContent = 'Så här blir det 👆';
+      if (data.speak) say('svar_' + q.ans, revealText(q.ans), 0.3);
       $('#k-ok').textContent = '➜';
       renderQuestion();
       renderDots();
@@ -380,7 +439,7 @@ if (typeof document !== 'undefined') {
 
     $('#result-stars').innerHTML = [0, 1, 2].map((i) =>
       `<span class="${i < stars ? '' : 'dim'}" style="animation-delay:${i * 0.25}s">⭐</span>`).join('');
-    $('#result-title').textContent = ['', 'Bra kämpat!', 'Jättebra!', 'Fantastiskt!'][stars];
+    $('#result-title').textContent = RESULT_TITLES[stars];
     $('#result-text').textContent = `${game.firstTry} av ${game.queue.length} rätt på första försöket`
       + (newBest && stars > 1 ? ' – nytt rekord!' : '');
     $('#result-sticker').textContent = st;
@@ -391,7 +450,7 @@ if (typeof document !== 'undefined') {
     show('result');
     sndWin();
     if (stars >= 2) confetti();
-    if (data.speak) say(['', 'Bra kämpat!', 'Jättebra!', 'Fantastiskt!'][stars]);
+    if (data.speak) say('res_' + stars, RESULT_TITLES[stars], 0.5);
   }
 
   $('#play-quit').addEventListener('click', () => { stopGame(); show('home'); });
