@@ -156,8 +156,12 @@ if (typeof document !== 'undefined') {
   let svVoice = null;
   function pickVoice() {
     if (!window.speechSynthesis) return;
-    const vs = speechSynthesis.getVoices();
-    svVoice = vs.find((v) => /^sv/i.test(v.lang)) || null;
+    // Välj den bästa svenska rösten: nätverks-/premiumröster låter mycket bättre än standard
+    const score = (v) => (/natural|neural|premium|enhanced|förbättrad/i.test(v.name) ? 4 : 0) +
+      (/google/i.test(v.name) ? 3 : 0) + (/alva|klara|sofie|hillevi/i.test(v.name) ? 2 : 0) +
+      (v.localService === false ? 1 : 0);
+    const sv = speechSynthesis.getVoices().filter((v) => /^sv/i.test(v.lang));
+    svVoice = sv.sort((a, b) => score(b) - score(a))[0] || null;
   }
   if (window.speechSynthesis) {
     pickVoice();

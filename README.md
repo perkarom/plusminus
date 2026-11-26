@@ -2,6 +2,10 @@
 
 En liten app (PWA) där barn övar plus och minus upp till 20. Den är gjord för en 6-åring.
 
+**Prova appen:** https://perkarom.github.io/plusminus/
+
+![Skärmbilder: startsidan, ett plustal med bilder, ett visat svar vid minus, tiokompisar, resultat med klistermärke och albumet](docs/skarmbilder.png)
+
 - 8 nivåer: plus/minus upp till 5, 10 och 20, tiokompisar och blandat.
 - Bilder att räkna på, i grupper om fem. De visas direkt på de lätta nivåerna och via 💡 annars.
 - Två försök per tal. Efter två fel visas svaret med bilder.
