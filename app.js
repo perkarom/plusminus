@@ -199,15 +199,27 @@ if (typeof document !== 'undefined') {
   }
 
   // Inspelade klipp (audio/<namn>.mp3) spelas via Web Audio, som redan är upplåst efter första trycket.
+  // Klippen köas: ett nytt klipp börjar först när det förra har talat klart, så inget klipps av.
   // Går klippet inte att hämta används telefonens röst istället.
   const clips = new Map();
-  let voiceSrc = null;
+  const playing = new Set();
+  let voiceEnd = 0;          // när (i audio-tid) det senast köade klippet har talat klart
+  let chain = Promise.resolve();
   let sayToken = 0;
+
+  // Var talet slutar i klippet (efter det kommer bara tystnad)
+  function speechEnd(buf) {
+    const x = buf.getChannelData(0);
+    let i = x.length - 1;
+    while (i > 0 && Math.abs(x[i]) < 0.01) i--;
+    return Math.min(buf.duration, i / buf.sampleRate + 0.15);
+  }
   function loadClip(name) {
     if (!clips.has(name)) {
       const p = fetch(`audio/${name}.mp3`)
         .then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
-        .then((buf) => new Promise((ok, bad) => audio.decodeAudioData(buf, ok, bad)));
+        .then((buf) => new Promise((ok, bad) => audio.decodeAudioData(buf, ok, bad)))
+        .then((buf) => ({ buf, end: speechEnd(buf) }));
       p.catch(() => clips.delete(name));
       clips.set(name, p);
     }
@@ -215,26 +227,39 @@ if (typeof document !== 'undefined') {
   }
   function stopVoice() {
     sayToken++;
-    try { voiceSrc && voiceSrc.stop(); } catch (e) { /* redan slut */ }
-    voiceSrc = null;
+    chain = Promise.resolve();
+    playing.forEach((src) => { try { src.stop(); } catch (e) { /* redan slut */ } });
+    playing.clear();
+    voiceEnd = 0;
     if (window.speechSynthesis) speechSynthesis.cancel();
   }
-  async function say(name, text, delay = 0) {
-    stopVoice();
-    const token = sayToken;
+  // interrupt = avbryt det som låter (t.ex. när man trycker på 🔈 eller lämnar spelet)
+  // valid = kontroll precis innan klippet startar (t.ex. att talet fortfarande visas)
+  function say(name, text, delay = 0, interrupt = false, valid = () => true) {
+    if (interrupt) stopVoice();
     unlockAudio();
-    try {
-      if (!audio) throw new Error('inget ljud');
-      const buf = await loadClip(name);
-      if (token !== sayToken) return; // något annat har börjat låta
-      const src = audio.createBufferSource();
-      src.buffer = buf;
-      src.connect(audio.destination);
-      src.start(audio.currentTime + delay);
-      voiceSrc = src;
-    } catch (e) {
-      if (token === sayToken) sayTTS(text);
-    }
+    const token = sayToken;
+    const asked = audio ? audio.currentTime : 0;
+    const job = chain.then(async () => {
+      if (token !== sayToken) return;
+      try {
+        if (!audio) throw new Error('inget ljud');
+        const clip = await loadClip(name);
+        if (token !== sayToken || !valid()) return;
+        const src = audio.createBufferSource();
+        src.buffer = clip.buf;
+        src.connect(audio.destination);
+        const at = Math.max(audio.currentTime, asked + delay, voiceEnd + 0.15);
+        src.start(at);
+        voiceEnd = at + clip.end;
+        playing.add(src);
+        src.onended = () => playing.delete(src);
+      } catch (e) {
+        if (token === sayToken && valid()) sayTTS(text);
+      }
+    });
+    chain = job;
+    return job;
   }
 
   /* Vyer */
@@ -273,7 +298,7 @@ if (typeof document !== 'undefined') {
   $('#sound-toggle').addEventListener('click', () => { data.sound = !data.sound; save(); renderHome(); });
   $('#speak-toggle').addEventListener('click', () => {
     data.speak = !data.speak; save(); renderHome();
-    if (data.speak) say('upplasning', PHRASES.upplasning);
+    if (data.speak) say('upplasning', PHRASES.upplasning, 0, true);
   });
 
   /* Spelet */
@@ -310,7 +335,8 @@ if (typeof document !== 'undefined') {
     $('#k-ok').textContent = 'OK';
     renderQuestion();
     renderDots();
-    if (data.speak) say(clipName(cur()), speakText(cur()));
+    const q = cur();
+    if (data.speak) say(clipName(q), speakText(q), 0, false, () => game && cur() === q);
   }
 
   function renderDots() {
@@ -359,7 +385,7 @@ if (typeof document !== 'undefined') {
   }
 
   $('#help').addEventListener('click', () => { if (game) { game.showPics = true; renderQuestion(); } });
-  $('#say').addEventListener('click', () => { if (game) say(clipName(cur()), speakText(cur())); });
+  $('#say').addEventListener('click', () => { if (game) say(clipName(cur()), speakText(cur()), 0, true); });
 
   function press(k) {
     if (!game || game.locked) return;
