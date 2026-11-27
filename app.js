@@ -454,6 +454,26 @@ if (typeof document !== 'undefined') {
     if (data.speak) say('krona', PHRASES.krona, 0.2, true);
   });
   $('#sound-toggle').addEventListener('click', () => { data.sound = !data.sound; save(); renderHome(); });
+
+  // Ljud av/på under spelet: stänger av både ljud och uppläsning, nästa tryck återställer
+  function renderMute() {
+    const on = data.sound || data.speak;
+    $('#mute').textContent = on ? '🔊' : '🔇';
+    $('#mute').classList.toggle('off', !on);
+  }
+  $('#mute').addEventListener('click', () => {
+    if (data.sound || data.speak) {
+      data.lastAudio = { sound: data.sound, speak: data.speak };
+      data.sound = false; data.speak = false;
+      stopVoice();
+    } else {
+      const l = data.lastAudio || { sound: true, speak: true };
+      data.sound = l.sound; data.speak = l.speak;
+      if (data.speak && game) say(clipName(cur()), speakText(cur()), 0, true);
+      else tones([660, 880], 'triangle', 0.2);
+    }
+    save(); renderMute();
+  });
   $('#speak-toggle').addEventListener('click', () => {
     data.speak = !data.speak; save(); renderHome();
     if (data.speak) say('upplasning', PHRASES.upplasning, 0, true);
@@ -493,6 +513,7 @@ if (typeof document !== 'undefined') {
     $('#feedback').innerHTML = '&nbsp;';
     $('#k-ok').textContent = 'OK';
     game.qStart = Date.now();
+    renderMute();
     renderQuestion();
     renderDots();
     updateGoalLine();
