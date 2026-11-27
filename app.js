@@ -1,7 +1,7 @@
 'use strict';
 
 /* ---------- Nivåer och frågor (rena funktioner, testas med node) ---------- */
-const APP_VERSION = '5'; // höj tillsammans med CACHE i sw.js
+const APP_VERSION = '6'; // höj tillsammans med CACHE i sw.js
 const ROUND_LEN = 10;
 
 const LEVELS = [
@@ -398,6 +398,8 @@ if (typeof document !== 'undefined') {
 
   /* Vyer */
   function show(name) {
+    // Ny version kom under en omgång: ladda om när den är klar
+    if (pendingReload && name !== 'play' && name !== 'result') { location.reload(); return; }
     $$('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + name));
     if (name === 'home') renderHome();
     if (name === 'album') renderAlbum();
