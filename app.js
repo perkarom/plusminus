@@ -1,7 +1,7 @@
 'use strict';
 
 /* ---------- Nivåer och frågor (rena funktioner, testas med node) ---------- */
-const APP_VERSION = '7'; // höj tillsammans med CACHE i sw.js
+const APP_VERSION = '8'; // höj tillsammans med CACHE i sw.js
 // Nyheter som visas (och läses upp) en gång efter en uppdatering. say = text för ljudklippet audio/nyhet_<v>.mp3
 const NEWS = [
   { v: 5, items: ['🎯 Ett <b>mål</b> för varje dag', '🔥 Elden visar hur många <b>dagar i rad</b> du klarat målet',
@@ -720,14 +720,13 @@ if (typeof document !== 'undefined') {
   function showNews() {
     if (!$('#view-home').classList.contains('active') || !$('#modal').hidden) return;
     const news = newsFor(data.seenNews);
-    data.seenNews = Number(APP_VERSION);
-    save();
     if (!news.length) return;
     openModal({
       icon: '🎉', title: 'Nytt i appen!',
       html: '<ul class="news">' + news.flatMap((n) => n.items).map((t) => `<li>${t}</li>`).join('') + '</ul>',
       yes: 'Coolt! 👍',
-      onYes: () => stopVoice(),
+      // Räknas som sedd först när man stänger rutan (försvinner den ändå kommer den igen)
+      onYes: () => { stopVoice(); data.seenNews = Number(APP_VERSION); save(); },
     });
     if (data.speak) {
       say('nyhet', PHRASES.nyhet, 0.2, true);
@@ -752,6 +751,8 @@ if (typeof document !== 'undefined') {
     const cb = yes ? modalCb.onYes : modalCb.onNo;
     modalCb = {};
     if (cb) cb();
+    // En ny version väntade på att rutan skulle stängas
+    if (pendingReload && $('#view-home').classList.contains('active')) location.reload();
   }
   $('#modal-yes').addEventListener('click', () => closeModal(true));
   $('#modal-no').addEventListener('click', () => closeModal(false));
@@ -946,7 +947,10 @@ if (typeof document !== 'undefined') {
     let reloaded = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!hadController || reloaded) return;
-      if (document.querySelector('#view-play.active, #view-result.active')) { pendingReload = true; setUpdateStatus('ready'); return; }
+      // Inte mitt i en omgång eller medan en ruta (t.ex. nyheterna) är öppen
+      if (document.querySelector('#view-play.active, #view-result.active') || !$('#modal').hidden) {
+        pendingReload = true; setUpdateStatus('ready'); return;
+      }
       reloaded = true;
       location.reload();
     });
