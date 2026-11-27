@@ -1,4 +1,4 @@
-const CACHE = 'plusminus-v6';
+const CACHE = 'plusminus-v7';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/apple-touch-icon.png', 'icons/icon-512.png', 'icons/maskable-512.png'];
 

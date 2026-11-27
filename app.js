@@ -1,7 +1,15 @@
 'use strict';
 
 /* ---------- Nivåer och frågor (rena funktioner, testas med node) ---------- */
-const APP_VERSION = '6'; // höj tillsammans med CACHE i sw.js
+const APP_VERSION = '7'; // höj tillsammans med CACHE i sw.js
+// Nyheter som visas (och läses upp) en gång efter en uppdatering. say = text för ljudklippet audio/nyhet_<v>.mp3
+const NEWS = [
+  { v: 5, items: ['🎯 Ett <b>mål</b> för varje dag', '🔥 Elden visar hur många <b>dagar i rad</b> du klarat målet',
+    '👑 Kan du en nivå jättebra får den en <b>krona</b>'],
+  say: 'Nu finns det ett mål för varje dag. Elden visar hur många dagar i rad du har klarat målet. Och kan du en nivå jättebra får den en krona!' },
+  { v: 6, items: ['🔇 Stäng av <b>ljudet</b> medan du räknar'], say: 'Nu kan du stänga av ljudet medan du räknar.' },
+];
+function newsFor(seen) { return NEWS.filter((n) => n.v > seen); }
 const ROUND_LEN = 10;
 
 const LEVELS = [
@@ -117,6 +125,7 @@ const PHRASES = {
   upplasning: 'Nu läser jag upp talen.',
   mal: 'Hurra! Dagens mål är klart!',
   krona: 'Du kan redan det här! Vill du prova något svårare?',
+  nyhet: 'Det finns något nytt i appen!',
 };
 
 /* ---------- Kronor: en nivå man kan ---------- */
@@ -249,7 +258,7 @@ function parseBackup(text) {
 if (typeof module !== 'undefined') {
   module.exports = { LEVELS, STICKERS, PHRASES, PRAISE, allQuestions, buildRound, starsFor, nextSticker,
     speakText, clipName, revealText, CROWN_AT, isCrowned, harderLevel, todayStr, prevDay, fixGoal, goalProgress,
-    streakInfo, recordDaily, daySummary, makeBackup, parseBackup };
+    streakInfo, recordDaily, daySummary, makeBackup, parseBackup, NEWS, newsFor, APP_VERSION };
 }
 
 /* ---------- UI ---------- */
@@ -260,7 +269,8 @@ if (typeof document !== 'undefined') {
   const STORE = 'julias-plusminus-v1';
   let data;
   try { data = JSON.parse(localStorage.getItem(STORE)); } catch (e) { data = null; }
-  if (!data || typeof data !== 'object') data = {};
+  if (!data || typeof data !== 'object') data = { seenNews: Number(APP_VERSION) }; // ny: inga gamla nyheter
+  if (!Number.isFinite(data.seenNews)) data.seenNews = 4; // fanns före nyhetsrutan
   data.best = data.best || {};      // nivå-id -> bästa antal stjärnor
   data.stickers = data.stickers || {}; // emoji -> antal
   if (data.sound === undefined) data.sound = true;
@@ -416,6 +426,7 @@ if (typeof document !== 'undefined') {
   function stickerCount() { return Object.keys(data.stickers).length; }
 
   function renderHome() {
+    setTimeout(showNews, 400);
     $('#chip-stars').textContent = totalStars();
     $('#chip-stickers').textContent = stickerCount();
     const sk = streakInfo(data);
@@ -705,6 +716,25 @@ if (typeof document !== 'undefined') {
     toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
   }
 
+  /* Nytt i appen: visas och läses upp en gång efter en uppdatering */
+  function showNews() {
+    if (!$('#view-home').classList.contains('active') || !$('#modal').hidden) return;
+    const news = newsFor(data.seenNews);
+    data.seenNews = Number(APP_VERSION);
+    save();
+    if (!news.length) return;
+    openModal({
+      icon: '🎉', title: 'Nytt i appen!',
+      html: '<ul class="news">' + news.flatMap((n) => n.items).map((t) => `<li>${t}</li>`).join('') + '</ul>',
+      yes: 'Coolt! 👍',
+      onYes: () => stopVoice(),
+    });
+    if (data.speak) {
+      say('nyhet', PHRASES.nyhet, 0.2, true);
+      news.forEach((n) => say('nyhet_' + n.v, n.say));
+    }
+  }
+
   /* Pop-up */
   let modalCb = {};
   function openModal({ icon, title, html, yes, no, onYes, onNo }) {
@@ -712,7 +742,8 @@ if (typeof document !== 'undefined') {
     $('#modal-title').textContent = title;
     $('#modal-text').innerHTML = html;
     $('#modal-yes').textContent = yes;
-    $('#modal-no').textContent = no;
+    $('#modal-no').textContent = no || '';
+    $('#modal-no').hidden = !no;
     modalCb = { onYes, onNo };
     $('#modal').hidden = false;
   }
