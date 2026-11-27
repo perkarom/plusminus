@@ -1,7 +1,7 @@
 'use strict';
 
 /* ---------- Nivåer och frågor (rena funktioner, testas med node) ---------- */
-const APP_VERSION = '11'; // höj tillsammans med CACHE i sw.js
+const APP_VERSION = '12'; // höj tillsammans med CACHE i sw.js
 // Nyheter som visas (och läses upp) en gång efter en uppdatering. say = text för ljudklippet audio/nyhet_<v>.mp3
 const NEWS = [
   { v: 5, items: ['🎯 Ett <b>mål</b> för varje dag', '🔥 Elden visar hur många <b>dagar i rad</b> du klarat målet',
@@ -10,6 +10,8 @@ const NEWS = [
   { v: 6, items: ['🔇 Stäng av <b>ljudet</b> medan du räknar'], say: 'Nu kan du stänga av ljudet medan du räknar.' },
   { v: 10, items: ['🗣️ Tryck här för att stänga av <b>rösten</b>', '👆 Tryck på talet för att <b>höra det igen</b>'],
     say: 'Tryck på gubben som pratar för att stänga av rösten. Tryck på talet för att höra det igen.' },
+  { v: 12, items: ['🎁 Alla dina <b>klistermärken</b> finns under den nya knappen på startsidan'],
+    say: 'Alla dina klistermärken finns under den nya knappen på startsidan.' },
 ];
 function newsFor(seen) { return NEWS.filter((n) => n.v > seen); }
 const ROUND_LEN = 10;
@@ -433,6 +435,7 @@ if (typeof document !== 'undefined') {
     setTimeout(showNews, 400);
     $('#chip-stars').textContent = totalStars();
     $('#chip-stickers').textContent = stickerCount();
+    $('#album-btn-n').textContent = `${stickerCount()}/${STICKERS.length}`;
     const sk = streakInfo(data);
     $('#chip-streak').hidden = sk.count === 0;
     $('#chip-streak').classList.toggle('pending', !sk.todayDone);

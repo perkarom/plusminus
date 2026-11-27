@@ -9,7 +9,7 @@ En liten app (PWA) där barn övar plus och minus upp till 20. Den är gjord fö
 - 8 nivåer: plus/minus upp till 5, 10 och 20, tiokompisar och blandat.
 - Bilder att räkna på, i grupper om fem. De visas direkt på de lätta nivåerna och via 💡 annars.
 - Två försök per tal. Efter två fel visas svaret med bilder, och samma tal kommer tillbaka senare i omgången.
-- Stjärnor per nivå och ett klistermärke efter varje omgång (album med 40 st).
+- Stjärnor per nivå och ett klistermärke efter varje omgång. Albumet (40 st) har en egen stor knapp på startsidan, och man kommer dit också genom att trycka på det nya klistermärket efter en omgång.
 - **👑 Krona:** efter 3 omgångar med tre stjärnor på en nivå får den en krona. Appen föreslår då en svårare nivå (både i text och uppläst), och det gör den också när man trycker Spela igen efter tre stjärnor. Nivåer med krona räknas inte till dagens mål eller dagar i rad.
 - **🎯 Dagens mål:** ett antal rätt svar per dag (10, 20, 30 eller 50, förvalt 20). När målet nås kommer konfetti och "Hurra! Dagens mål är klart!".
 - **🔥 Dagar i rad:** dagar då målet nåtts, visas på startsidan. Utan mål räcker ett rätt svar om dagen.

@@ -26,6 +26,7 @@
       <span id="goal-text"></span>
       <div class="goal-track"><div id="goal-fill"></div></div>
     </div>
+    <button class="big album-btn" data-go="album">🎁 Mina klistermärken <span id="album-btn-n" class="album-n"></span></button>
     <div id="levels" class="levels"></div>
     <button id="install-btn" class="big install" hidden>📲 Installera appen</button>
     <p id="install-help-ios" class="install-help" hidden></p>
@@ -73,7 +74,8 @@
       <p id="result-goal" class="result-goal" hidden></p>
       <div class="sticker-win">
         <small>Du fick ett klistermärke!</small>
-        <div id="result-sticker" class="sticker-big"></div>
+        <button id="result-sticker" class="sticker-big" data-go="album" aria-label="Till mina klistermärken"></button>
+        <small class="sticker-hint">Tryck för att se alla dina 👆</small>
       </div>
       <button id="result-again" class="big c2">Spela igen 🔁</button>
       <button class="big c5" data-go="home">Till start 🏠</button>
