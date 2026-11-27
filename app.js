@@ -1,13 +1,15 @@
 'use strict';
 
 /* ---------- Nivåer och frågor (rena funktioner, testas med node) ---------- */
-const APP_VERSION = '9'; // höj tillsammans med CACHE i sw.js
+const APP_VERSION = '10'; // höj tillsammans med CACHE i sw.js
 // Nyheter som visas (och läses upp) en gång efter en uppdatering. say = text för ljudklippet audio/nyhet_<v>.mp3
 const NEWS = [
   { v: 5, items: ['🎯 Ett <b>mål</b> för varje dag', '🔥 Elden visar hur många <b>dagar i rad</b> du klarat målet',
     '👑 Kan du en nivå jättebra får den en <b>krona</b>'],
   say: 'Nu finns det ett mål för varje dag. Elden visar hur många dagar i rad du har klarat målet. Och kan du en nivå jättebra får den en krona!' },
   { v: 6, items: ['🔇 Stäng av <b>ljudet</b> medan du räknar'], say: 'Nu kan du stänga av ljudet medan du räknar.' },
+  { v: 10, items: ['🗣️ Tryck här för att stänga av <b>rösten</b>', '👆 Tryck på talet för att <b>höra det igen</b>'],
+    say: 'Tryck på gubben som pratar för att stänga av rösten. Tryck på talet för att höra det igen.' },
 ];
 function newsFor(seen) { return NEWS.filter((n) => n.v > seen); }
 const ROUND_LEN = 10;
@@ -472,27 +474,27 @@ if (typeof document !== 'undefined') {
   }
   $('#sound-toggle').addEventListener('click', () => { data.sound = !data.sound; save(); renderHome(); });
 
-  // Ljud av/på under spelet: stänger av både ljud och uppläsning, nästa tryck återställer
+  // Under spelet: 🔊/🔇 = pipljud, 🗣️/🤫 = uppläsning (samma två val som på startsidan)
   function renderMute() {
-    const on = data.sound || data.speak;
-    $('#mute').textContent = on ? '🔊' : '🔇';
-    $('#mute').classList.toggle('off', !on);
+    $('#mute').textContent = data.sound ? '🔊' : '🔇';
+    $('#mute').classList.toggle('off', !data.sound);
+    $('#say').textContent = data.speak ? '🗣️' : '🤫';
+    $('#say').classList.toggle('off', !data.speak);
+  }
+  function setSpeak(on) {
+    data.speak = on; save();
+    if (!on) stopVoice();
   }
   $('#mute').addEventListener('click', () => {
-    if (data.sound || data.speak) {
-      data.lastAudio = { sound: data.sound, speak: data.speak };
-      data.sound = false; data.speak = false;
-      stopVoice();
-    } else {
-      const l = data.lastAudio || { sound: true, speak: true };
-      data.sound = l.sound; data.speak = l.speak;
-      if (data.speak && game) say(clipName(cur()), speakText(cur()), 0, true);
-      else tones([660, 880], 'triangle', 0.2);
-    }
-    save(); renderMute();
+    data.sound = !data.sound; save(); renderMute();
+    if (data.sound) tones([660, 880], 'triangle', 0.2);
+  });
+  $('#say').addEventListener('click', () => {
+    setSpeak(!data.speak); renderMute();
+    if (data.speak && game) say(clipName(cur()), speakText(cur()), 0, true);
   });
   $('#speak-toggle').addEventListener('click', () => {
-    data.speak = !data.speak; save(); renderHome();
+    setSpeak(!data.speak); renderHome();
     if (data.speak) say('upplasning', PHRASES.upplasning, 0, true);
   });
 
@@ -584,7 +586,8 @@ if (typeof document !== 'undefined') {
   }
 
   $('#help').addEventListener('click', () => { if (game) { game.showPics = true; renderQuestion(); } });
-  $('#say').addEventListener('click', () => { if (game) say(clipName(cur()), speakText(cur()), 0, true); });
+  // Tryck på talet för att höra det igen (fungerar även när uppläsningen är av)
+  $('#question').addEventListener('click', () => { if (game) say(clipName(cur()), speakText(cur()), 0, true); });
 
   function press(k) {
     if (!game || game.locked) return;

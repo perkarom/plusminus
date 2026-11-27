@@ -16,7 +16,7 @@ En liten app (PWA) där barn övar plus och minus upp till 20. Den är gjord fö
 - **👨‍👩‍👧 För vuxna:** välja dagens mål, se dag för dag (staplar för 14 dagar och en lista), nivåerna med stjärnor och kronor, Så funkar det, spara och hämta allt som fil, och börja om.
 - Appen uppdaterar sig själv. Raden längst ner på startsidan visar om den är uppdaterad.
 - **🎉 Nytt i appen:** efter en uppdatering visas nyheterna en gång i en ruta med stora ikoner, och de läses upp. Nyheterna står i `NEWS` i `app.js`, och varje post behöver ett ljudklipp `audio/nyhet_<version>.mp3`.
-- 🔊/🔇 i spelet stänger av ljud och uppläsning direkt, utan att gå till startsidan.
-- 🗣️ läser upp talet på svenska med inspelade klipp (`audio/`, rösten sv-SE-SofieNeural via edge-tts). Klippen hämtas när talet visas. Saknas ett klipp används telefonens röst.
+- Uppe till höger i spelet: 🗣️/🤫 slår uppläsningen av och på och 🔊/🔇 pipljuden, utan att gå till startsidan. Tryck på talet för att höra det igen.
+- Uppläsningen sker på svenska med inspelade klipp (`audio/`, rösten sv-SE-SofieNeural via edge-tts). Klippen hämtas när talet visas. Saknas ett klipp används telefonens röst.
 
 Vanlig HTML/CSS/JS utan byggsteg. Vid varje ny version: höj `CACHE` i `sw.js` och `APP_VERSION` i `app.js` till samma nummer.
