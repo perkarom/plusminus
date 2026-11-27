@@ -1,7 +1,7 @@
 'use strict';
 
 /* ---------- Nivåer och frågor (rena funktioner, testas med node) ---------- */
-const APP_VERSION = '8'; // höj tillsammans med CACHE i sw.js
+const APP_VERSION = '9'; // höj tillsammans med CACHE i sw.js
 // Nyheter som visas (och läses upp) en gång efter en uppdatering. say = text för ljudklippet audio/nyhet_<v>.mp3
 const NEWS = [
   { v: 5, items: ['🎯 Ett <b>mål</b> för varje dag', '🔥 Elden visar hur många <b>dagar i rad</b> du klarat målet',
@@ -126,6 +126,7 @@ const PHRASES = {
   mal: 'Hurra! Dagens mål är klart!',
   krona: 'Du kan redan det här! Vill du prova något svårare?',
   nyhet: 'Det finns något nytt i appen!',
+  svarare: 'Jättebra! Vill du prova något svårare?',
 };
 
 /* ---------- Kronor: en nivå man kan ---------- */
@@ -452,18 +453,23 @@ if (typeof document !== 'undefined') {
   $('#levels').addEventListener('click', (e) => {
     const b = e.target.closest('[data-level]');
     if (!b) return;
-    const lvl = LEVELS.find((l) => l.id === b.dataset.level);
-    const harder = isCrowned(data, lvl.id) && harderLevel(data, lvl.id);
+    playOrSuggest(LEVELS.find((l) => l.id === b.dataset.level), false);
+  });
+  // Nivå med krona (eller alla rätt när man trycker Spela igen): föreslå en svårare nivå
+  function playOrSuggest(lvl, perfect) {
+    const crowned = isCrowned(data, lvl.id);
+    const harder = (crowned || perfect) && harderLevel(data, lvl.id);
     if (!harder) return startGame(lvl);
-    // Nivån har krona: föreslå en svårare
+    const left = CROWN_AT - ((data.perfect && data.perfect[lvl.id]) || 0);
     openModal({
-      icon: '👑', title: 'Du kan redan det här!',
-      html: `Vill du prova <b>${harder.icon} ${harder.title} ${harder.sub}</b>?`,
-      yes: `Ja! ${harder.icon}`, no: 'Nej, spela ändå',
+      icon: crowned ? '👑' : '🌟', title: crowned ? 'Du kan redan det här!' : 'Jättebra! ⭐⭐⭐',
+      html: `Vill du prova <b>${harder.icon} ${harder.title} ${harder.sub}</b>?` +
+        (crowned ? '' : `<br><small>Får du tre stjärnor ${left} ${left === 1 ? 'gång' : 'gånger'} till här får nivån en 👑.</small>`),
+      yes: `Ja! ${harder.icon}`, no: crowned ? 'Nej, spela ändå' : 'Kör igen 🔁',
       onYes: () => startGame(harder), onNo: () => startGame(lvl),
     });
-    if (data.speak) say('krona', PHRASES.krona, 0.2, true);
-  });
+    if (data.speak) say(crowned ? 'krona' : 'svarare', crowned ? PHRASES.krona : PHRASES.svarare, 0.2, true);
+  }
   $('#sound-toggle').addEventListener('click', () => { data.sound = !data.sound; save(); renderHome(); });
 
   // Ljud av/på under spelet: stänger av både ljud och uppläsning, nästa tryck återställer
@@ -679,7 +685,7 @@ if (typeof document !== 'undefined') {
     $('#result-sticker').textContent = st;
     $('#result-sticker').dataset.new = isNew ? 'Ny!' : '';
     const lvl = game.level;
-    $('#result-again').onclick = () => startGame(lvl);
+    $('#result-again').onclick = () => playOrSuggest(lvl, stars === 3);
     game = null;
     show('result');
     sndWin();

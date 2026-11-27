@@ -307,6 +307,7 @@ h2 { margin: 0; font-size: 1.4rem; font-weight: 900; }
   box-shadow: 0 12px 40px rgba(0,0,0,.3); animation: modal-pop .3s cubic-bezier(.2,1.4,.4,1); }
 .modal-icon { font-size: 3.6rem; line-height: 1; }
 .modal-box p { margin: 0 0 6px; font-size: 1.15rem; line-height: 1.4; font-weight: 700; }
+.modal-box p small { display: block; margin-top: 8px; font-size: .9rem; color: var(--muted); }
 .news { text-align: left; margin: 0; padding: 0; list-style: none; font-size: 1.15rem; font-weight: 700; line-height: 1.35; }
 .news li { margin: 0 0 10px; }
 @keyframes modal-fade { from { opacity: 0; } }
