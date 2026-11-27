@@ -1,7 +1,7 @@
 'use strict';
 
 /* ---------- Nivåer och frågor (rena funktioner, testas med node) ---------- */
-const APP_VERSION = '12'; // höj tillsammans med CACHE i sw.js
+const APP_VERSION = '13'; // höj tillsammans med CACHE i sw.js
 // Nyheter som visas (och läses upp) en gång efter en uppdatering. say = text för ljudklippet audio/nyhet_<v>.mp3
 const NEWS = [
   { v: 5, items: ['🎯 Ett <b>mål</b> för varje dag', '🔥 Elden visar hur många <b>dagar i rad</b> du klarat målet',
@@ -12,6 +12,8 @@ const NEWS = [
     say: 'Tryck på gubben som pratar för att stänga av rösten. Tryck på talet för att höra det igen.' },
   { v: 12, items: ['🎁 Alla dina <b>klistermärken</b> finns under den nya knappen på startsidan'],
     say: 'Alla dina klistermärken finns under den nya knappen på startsidan.' },
+  { v: 13, items: ['🦩 Ett nytt djur: <b>flamingo</b>! Den finns som klistermärke och ibland när du räknar'],
+    say: 'Ett nytt djur! En flamingo. Den finns som klistermärke, och ibland när du räknar.' },
 ];
 function newsFor(seen) { return NEWS.filter((n) => n.v > seen); }
 const ROUND_LEN = 10;
@@ -30,9 +32,9 @@ const LEVELS = [
 const STICKERS = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮',
   '🐷', '🐸', '🐵', '🐔', '🐧', '🦄', '🐝', '🦋', '🐞', '🐢', '🐙', '🐬',
   '🐳', '🦒', '🐘', '🦔', '🌈', '🌻', '🍓', '🍦', '🧁', '🎈', '⭐', '👑',
-  '🦖', '🚀', '🎠', '💎'];
+  '🦖', '🚀', '🎠', '💎', '🦩'];
 
-const THEMES = ['🍎', '🍓', '🐞', '⭐', '🌸', '🐟', '🍪', '🎈', '🐥', '🍒'];
+const THEMES = ['🍎', '🍓', '🐞', '⭐', '🌸', '🐟', '🍪', '🎈', '🐥', '🍒', '🦩'];
 
 // En fråga: a op b = ans. hide = vilken ruta som är tom ('ans' eller 'b').
 function allQuestions(level) {
