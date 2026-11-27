@@ -1,6 +1,7 @@
 'use strict';
 
 /* ---------- Nivåer och frågor (rena funktioner, testas med node) ---------- */
+const APP_VERSION = '5'; // höj tillsammans med CACHE i sw.js
 const ROUND_LEN = 10;
 
 const LEVELS = [
@@ -114,11 +115,141 @@ const PHRASES = {
   nastan: 'Nästan! Försök igen.',
   res_1: 'Bra kämpat!', res_2: 'Jättebra!', res_3: 'Fantastiskt!',
   upplasning: 'Nu läser jag upp talen.',
+  mal: 'Hurra! Dagens mål är klart!',
+  krona: 'Du kan redan det här! Vill du prova något svårare?',
 };
+
+/* ---------- Kronor: en nivå man kan ---------- */
+const CROWN_AT = 3; // antal omgångar med 3 stjärnor
+function isCrowned(d, id) { return ((d.perfect && d.perfect[id]) || 0) >= CROWN_AT; }
+// Nästa nivå i listan som inte har krona (för "prova något svårare")
+function harderLevel(d, id) {
+  const i = LEVELS.findIndex((l) => l.id === id);
+  return LEVELS.slice(i + 1).find((l) => !isCrowned(d, l.id)) || null;
+}
+
+/* ---------- Dagens mål och dagar i rad (samma logik som Gångerkungen, bara "rätt svar") ---------- */
+const GOAL_VALUES = [10, 20, 30, 50];
+const DEFAULT_GOAL = { type: 'right', value: 20 };
+const MAX_Q_MS = 30000; // max tid som räknas per fråga
+const DAYS_KEEP = 365;
+
+function todayStr(d = new Date()) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function prevDay(date) {
+  const [y, m, d] = date.split('-').map(Number);
+  return todayStr(new Date(y, m - 1, d - 1)); // Date hanterar månads-/årsskiften och sommartid
+}
+function fixGoal(g) {
+  if (g && g.type === 'off') return { type: 'off', value: 0 };
+  if (g && g.type === 'right' && GOAL_VALUES.includes(g.value)) return { type: 'right', value: g.value };
+  return { ...DEFAULT_GOAL };
+}
+function dailyOf(p, date = todayStr()) {
+  if (!p.daily || p.daily.date !== date) p.daily = { date, right: 0, done: false };
+  return p.daily;
+}
+function goalProgress(p, date = todayStr()) {
+  const g = fixGoal(p.goal);
+  if (g.type === 'off') return { type: 'off', done: false, frac: 0, short: '' };
+  const d = dailyOf(p, date);
+  const done = d.done || d.right >= g.value;
+  return { type: 'right', done, frac: Math.min(1, d.right / g.value), right: d.right, goal: g.value,
+    short: done ? '🎯 ✅' : `🎯 ${d.right}/${g.value}` };
+}
+function markStreakDay(p, date) {
+  p.streakDays = p.streakDays || [];
+  if (!p.streakDays.includes(date)) p.streakDays = p.streakDays.concat(date).slice(-400);
+  p.bestStreak = Math.max(p.bestStreak || 0, streakInfo(p, date).count);
+}
+// Sviten lever hela dagen: räknas från idag om dagen är klar, annars från igår.
+function streakInfo(p, date = todayStr()) {
+  const set = new Set(p.streakDays || []);
+  const todayDone = set.has(date);
+  let d = todayDone ? date : prevDay(date);
+  let count = 0;
+  while (set.has(d)) { count++; d = prevDay(d); }
+  return { count, todayDone, best: Math.max(p.bestStreak || 0, count) };
+}
+function trimDays(days) {
+  const keys = Object.keys(days).sort();
+  keys.slice(0, Math.max(0, keys.length - DAYS_KEEP)).forEach((k) => delete days[k]);
+  return days;
+}
+// Registrera ett svar. Returnerar true om dagens mål nåddes precis nu.
+// counts = false: nivå med krona, syns i dag-för-dag men räknas inte till målet/sviten
+function recordDaily(p, ok, ms, date = todayStr(), counts = true) {
+  p.days = p.days || {};
+  const day = p.days[date] || (p.days[date] = { r: 0, w: 0, ms: 0 });
+  if (ok) day.r++; else day.w++;
+  day.ms += Math.min(Math.max(0, ms), MAX_Q_MS);
+  if (Object.keys(p.days).length > DAYS_KEEP) trimDays(p.days);
+  if (!counts || !ok) return false;
+  const d = dailyOf(p, date);
+  d.right++;
+  if (fixGoal(p.goal).type === 'off') { markStreakDay(p, date); return false; }
+  if (d.done) return false;
+  if (goalProgress(p, date).done) {
+    d.done = true;
+    p.goalDays = (p.goalDays || []).concat(date).slice(-400);
+    markStreakDay(p, date);
+    return true;
+  }
+  return false;
+}
+// De senaste n dagarna (äldst först), även dagar utan övning
+function daySummary(p, n, date = todayStr()) {
+  const goals = new Set(p.goalDays || []);
+  const out = [];
+  let d = date;
+  for (let i = 0; i < n; i++) {
+    const v = (p.days && p.days[d]) || { r: 0, w: 0, ms: 0 };
+    out.unshift({ date: d, r: v.r, w: v.w, ms: v.ms, goal: goals.has(d) });
+    d = prevDay(d);
+  }
+  return out;
+}
+
+/* ---------- Spara / hämta som fil ---------- */
+const BACKUP_KEYS = ['best', 'stickers', 'perfect', 'days', 'goalDays', 'streakDays', 'bestStreak'];
+function makeBackup(d) {
+  const b = { app: 'julias-plusminus', version: 1, saved: new Date().toISOString() };
+  BACKUP_KEYS.forEach((k) => { b[k] = d[k]; });
+  return b;
+}
+function parseBackup(text) {
+  let b;
+  try { b = JSON.parse(text); } catch (e) { throw new Error('Filen går inte att läsa.'); }
+  if (!b || b.app !== 'julias-plusminus') throw new Error('Det här är ingen fil från Julias + och −.');
+  const num = (x) => (Number.isFinite(x) && x >= 0 ? Math.round(x) : 0);
+  const ids = new Set(LEVELS.map((l) => l.id));
+  const byLevel = (o, max) => {
+    const out = {};
+    if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) if (ids.has(k)) out[k] = Math.min(max, num(v));
+    return out;
+  };
+  const stickers = {};
+  if (b.stickers && typeof b.stickers === 'object') {
+    for (const [k, v] of Object.entries(b.stickers)) if (STICKERS.includes(k) && num(v)) stickers[k] = num(v);
+  }
+  const days = {};
+  if (b.days && typeof b.days === 'object') {
+    for (const [k, v] of Object.entries(b.days)) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(k) && v && typeof v === 'object') days[k] = { r: num(v.r), w: num(v.w), ms: num(v.ms) };
+    }
+  }
+  const dates = (a) => (Array.isArray(a) ? a.filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)).slice(-400) : []);
+  return {
+    best: byLevel(b.best, 3), perfect: byLevel(b.perfect, 999), stickers, days: trimDays(days),
+    goalDays: dates(b.goalDays), streakDays: dates(b.streakDays), bestStreak: num(b.bestStreak),
+  };
+}
 
 if (typeof module !== 'undefined') {
   module.exports = { LEVELS, STICKERS, PHRASES, PRAISE, allQuestions, buildRound, starsFor, nextSticker,
-    speakText, clipName, revealText };
+    speakText, clipName, revealText, CROWN_AT, isCrowned, harderLevel, todayStr, prevDay, fixGoal, goalProgress,
+    streakInfo, recordDaily, daySummary, makeBackup, parseBackup };
 }
 
 /* ---------- UI ---------- */
@@ -134,6 +265,9 @@ if (typeof document !== 'undefined') {
   data.stickers = data.stickers || {}; // emoji -> antal
   if (data.sound === undefined) data.sound = true;
   if (data.speak === undefined) data.speak = true;
+  data.perfect = data.perfect || {};  // nivå-id -> antal omgångar med 3 stjärnor
+  data.days = data.days || {};        // dag för dag
+  data.goal = fixGoal(data.goal);
   function save() { try { localStorage.setItem(STORE, JSON.stringify(data)); } catch (e) { /* ignorera */ } }
 
   /* Ljud */
@@ -267,6 +401,7 @@ if (typeof document !== 'undefined') {
     $$('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + name));
     if (name === 'home') renderHome();
     if (name === 'album') renderAlbum();
+    if (name === 'adult') renderAdult();
     window.scrollTo(0, 0);
   }
   $$('[data-go]').forEach((b) => b.addEventListener('click', () => {
@@ -281,8 +416,18 @@ if (typeof document !== 'undefined') {
   function renderHome() {
     $('#chip-stars').textContent = totalStars();
     $('#chip-stickers').textContent = stickerCount();
+    const sk = streakInfo(data);
+    $('#chip-streak').hidden = sk.count === 0;
+    $('#chip-streak').classList.toggle('pending', !sk.todayDone);
+    $('#chip-streak-n').textContent = sk.count;
+    const gp = goalProgress(data);
+    $('#goal-bar').hidden = gp.type === 'off';
+    $('#goal-bar').classList.toggle('done', gp.done);
+    $('#goal-text').textContent = gp.short;
+    $('#goal-fill').style.width = gp.frac * 100 + '%';
     $('#levels').innerHTML = LEVELS.map((l) => `
-      <button class="level ${l.c}" data-level="${l.id}">
+      <button class="level ${l.c}${isCrowned(data, l.id) ? ' crowned' : ''}" data-level="${l.id}">
+        ${isCrowned(data, l.id) ? '<span class="l-crown">👑</span>' : ''}
         <span class="l-icon">${l.icon}</span>
         <span class="l-title">${l.title}</span>
         <span class="l-sub">${l.sub}</span>
@@ -293,7 +438,18 @@ if (typeof document !== 'undefined') {
   }
   $('#levels').addEventListener('click', (e) => {
     const b = e.target.closest('[data-level]');
-    if (b) startGame(LEVELS.find((l) => l.id === b.dataset.level));
+    if (!b) return;
+    const lvl = LEVELS.find((l) => l.id === b.dataset.level);
+    const harder = isCrowned(data, lvl.id) && harderLevel(data, lvl.id);
+    if (!harder) return startGame(lvl);
+    // Nivån har krona: föreslå en svårare
+    openModal({
+      icon: '👑', title: 'Du kan redan det här!',
+      html: `Vill du prova <b>${harder.icon} ${harder.title} ${harder.sub}</b>?`,
+      yes: `Ja! ${harder.icon}`, no: 'Nej, spela ändå',
+      onYes: () => startGame(harder), onNo: () => startGame(lvl),
+    });
+    if (data.speak) say('krona', PHRASES.krona, 0.2, true);
   });
   $('#sound-toggle').addEventListener('click', () => { data.sound = !data.sound; save(); renderHome(); });
   $('#speak-toggle').addEventListener('click', () => {
@@ -312,6 +468,7 @@ if (typeof document !== 'undefined') {
       idx: 0,
       firstTry: 0,
       results: [],
+      crowned: isCrowned(data, level.id), // räknas inte till dagens mål
       theme: THEMES[Math.floor(Math.random() * THEMES.length)],
     };
     show('play');
@@ -333,8 +490,10 @@ if (typeof document !== 'undefined') {
     $('#card').className = 'card';
     $('#feedback').innerHTML = '&nbsp;';
     $('#k-ok').textContent = 'OK';
+    game.qStart = Date.now();
     renderQuestion();
     renderDots();
+    updateGoalLine();
     const q = cur();
     if (data.speak) say(clipName(q), speakText(q), 0, false, () => game && cur() === q);
   }
@@ -343,7 +502,7 @@ if (typeof document !== 'undefined') {
     $('#play-dots').innerHTML = game.queue.map((_, i) => {
       const r = game.results[i];
       const cls = r === 'first' ? 'd-good' : r === 'later' ? 'd-ok' : r === 'miss' ? 'd-miss' : i === game.idx ? 'd-now' : '';
-      return `<i class="${cls}"></i>`;
+      return `<i class="${cls}${game.queue[i].again ? ' again' : ''}"></i>`;
     }).join('');
   }
 
@@ -414,7 +573,11 @@ if (typeof document !== 'undefined') {
     const card = $('#card');
     if (Number(game.input) === q.ans) {
       game.results[game.idx] = game.tries === 0 ? 'first' : 'later';
-      if (game.tries === 0) game.firstTry++;
+      if (game.tries === 0 && !q.again) game.firstTry++;
+      const goalNow = recordDaily(data, true, Date.now() - game.qStart, todayStr(), !game.crowned);
+      save();
+      updateGoalLine();
+      if (goalNow) celebrateGoal();
       card.className = 'card right bump';
       const pi = Math.floor(Math.random() * PRAISE.length);
       $('#feedback').textContent = PRAISE[pi];
@@ -425,6 +588,8 @@ if (typeof document !== 'undefined') {
       return;
     }
     game.tries++;
+    recordDaily(data, false, game.tries >= 2 ? Date.now() - game.qStart : 0, todayStr(), !game.crowned);
+    save();
     sndWrong();
     card.className = 'card wrong';
     if (game.tries === 1) {
@@ -435,6 +600,8 @@ if (typeof document !== 'undefined') {
       renderQuestion();
     } else {
       game.results[game.idx] = 'miss';
+      // Samma tal kommer tillbaka lite senare i omgången (en gång)
+      if (!q.again) game.queue.splice(Math.min(game.idx + 3, game.queue.length), 0, { ...q, again: true });
       game.reveal = true;
       game.showPics = true;
       card.className = 'card reveal';
@@ -454,10 +621,13 @@ if (typeof document !== 'undefined') {
   }
 
   function finish() {
-    const stars = starsFor(game.firstTry, game.queue.length);
+    const stars = starsFor(game.firstTry, ROUND_LEN);
     const id = game.level.id;
     const newBest = stars > (data.best[id] || 0);
     data.best[id] = Math.max(stars, data.best[id] || 0);
+    const wasCrowned = isCrowned(data, id);
+    if (stars === 3) data.perfect[id] = (data.perfect[id] || 0) + 1;
+    const newCrown = !wasCrowned && isCrowned(data, id);
     const st = nextSticker(data.stickers);
     const isNew = !data.stickers[st];
     data.stickers[st] = (data.stickers[st] || 0) + 1;
@@ -465,9 +635,13 @@ if (typeof document !== 'undefined') {
 
     $('#result-stars').innerHTML = [0, 1, 2].map((i) =>
       `<span class="${i < stars ? '' : 'dim'}" style="animation-delay:${i * 0.25}s">⭐</span>`).join('');
-    $('#result-title').textContent = RESULT_TITLES[stars];
-    $('#result-text').textContent = `${game.firstTry} av ${game.queue.length} rätt på första försöket`
+    $('#result-title').textContent = newCrown ? '👑 Du kan den här nivån!' : RESULT_TITLES[stars];
+    $('#result-text').textContent = `${game.firstTry} av ${ROUND_LEN} rätt på första försöket`
       + (newBest && stars > 1 ? ' – nytt rekord!' : '');
+    const gp = goalProgress(data);
+    $('#result-goal').hidden = gp.type === 'off' && !game.crowned;
+    $('#result-goal').textContent = game.crowned ? '👑 Du kunde redan den här – prova en svårare!'
+      : gp.done ? '🎯 Dagens mål är klart! ✅' : `🎯 ${gp.right} av ${gp.goal} rätt idag`;
     $('#result-sticker').textContent = st;
     $('#result-sticker').dataset.new = isNew ? 'Ny!' : '';
     const lvl = game.level;
@@ -475,13 +649,156 @@ if (typeof document !== 'undefined') {
     game = null;
     show('result');
     sndWin();
-    if (stars >= 2) confetti();
+    if (stars >= 2 || newCrown) confetti();
     if (data.speak) say('res_' + stars, RESULT_TITLES[stars], 0.5);
   }
 
   $('#play-quit').addEventListener('click', () => { stopGame(); show('home'); });
   window.addEventListener('popstate', () => {
     if (!$('#view-home').classList.contains('active')) { stopGame(); show('home'); }
+  });
+
+  /* Dagens mål under spelet */
+  function updateGoalLine() {
+    if (!game) return;
+    const gp = goalProgress(data);
+    const el = $('#goal-line');
+    el.hidden = gp.type === 'off' && !game.crowned;
+    el.textContent = game.crowned ? '👑 räknas inte till målet' : gp.short;
+    el.classList.toggle('done', gp.done && !game.crowned);
+  }
+  function celebrateGoal() {
+    const s = streakInfo(data);
+    toast('🎉 Dagens mål klart, Julia!' + (s.count > 1 ? `\n🔥 ${s.count} dagar i rad!` : ''));
+    confetti();
+    if (data.speak) say('mal', PHRASES.mal, 0.2);
+  }
+  let toastTimer = null;
+  function toast(text) {
+    const t = $('#toast');
+    t.textContent = text;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+  }
+
+  /* Pop-up */
+  let modalCb = {};
+  function openModal({ icon, title, html, yes, no, onYes, onNo }) {
+    $('#modal-icon').textContent = icon || '';
+    $('#modal-title').textContent = title;
+    $('#modal-text').innerHTML = html;
+    $('#modal-yes').textContent = yes;
+    $('#modal-no').textContent = no;
+    modalCb = { onYes, onNo };
+    $('#modal').hidden = false;
+  }
+  function closeModal(yes) {
+    $('#modal').hidden = true;
+    const cb = yes ? modalCb.onYes : modalCb.onNo;
+    modalCb = {};
+    if (cb) cb();
+  }
+  $('#modal-yes').addEventListener('click', () => closeModal(true));
+  $('#modal-no').addEventListener('click', () => closeModal(false));
+
+  /* För vuxna */
+  const WD = ['S', 'M', 'T', 'O', 'T', 'F', 'L'];
+  const WDLONG = ['sön', 'mån', 'tis', 'ons', 'tor', 'fre', 'lör'];
+  const MON = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+  const dateOf = (x) => { const [y, m, d] = x.split('-').map(Number); return new Date(y, m - 1, d); };
+  const mins = (ms) => { const m = Math.round(ms / 60000); return ms > 0 && m < 1 ? '<1 min' : m + ' min'; };
+  function dayLabel(x, today) {
+    if (x === today) return 'Idag';
+    if (x === prevDay(today)) return 'Igår';
+    const d = dateOf(x);
+    return WDLONG[d.getDay()] + ' ' + d.getDate() + ' ' + MON[d.getMonth()];
+  }
+  function renderAdult() {
+    const g = fixGoal(data.goal);
+    $('#goal-seg').innerHTML = [['off', 'Av'], ...GOAL_VALUES.map((v) => [v, String(v)])].map(([v, t]) =>
+      `<button data-goal="${v}" class="${(g.type === 'off' ? 'off' : g.value) === v ? 'on' : ''}">${t}</button>`).join('');
+
+    const today = todayStr();
+    const sk = streakInfo(data);
+    const totR = Object.values(data.days).reduce((t, d) => t + d.r, 0);
+    $('#days-summary').innerHTML =
+      `<div class="stat-box"><b>🔥 ${sk.count}</b><small>dagar i rad</small></div>` +
+      `<div class="stat-box"><b>${sk.best}</b><small>bästa svit</small></div>` +
+      `<div class="stat-box"><b>${totR}</b><small>rätt totalt</small></div>`;
+    const days = daySummary(data, 14, today);
+    const week = days.slice(-7);
+    const wr = week.reduce((t, d) => t + d.r, 0);
+    const wms = week.reduce((t, d) => t + d.ms, 0);
+    const wn = week.filter((d) => d.r + d.w > 0).length;
+    const any = days.some((d) => d.r + d.w > 0);
+    $('#days-week').innerHTML = any
+      ? `Senaste 7 dagarna: <b>${wr} rätt</b> · ${mins(wms)} · ${wn} ${wn === 1 ? 'dag' : 'dagar'} övade`
+      : 'Här syns hur mycket Julia övar varje dag.';
+    const max = Math.max(10, ...days.map((d) => d.r + d.w));
+    $('#days-chart').innerHTML = days.map((d) => {
+      const tot = d.r + d.w;
+      return `<div class="day${d.date === today ? ' today' : ''}"><span class="day-goal">${d.goal ? '✅' : ''}</span>` +
+        `<span class="day-n">${tot ? d.r : ''}</span>` +
+        `<div class="day-bar" style="height:${(tot / max * 100).toFixed(1)}%">` +
+        (d.w ? `<i class="w" style="flex:${d.w}"></i>` : '') + (d.r ? `<i class="r" style="flex:${d.r}"></i>` : '') + '</div>' +
+        `<span class="day-wd">${WD[dateOf(d.date).getDay()]}</span></div>`;
+    }).join('');
+    $('#days-chart').hidden = !any;
+    $('#days-list').innerHTML = days.filter((d) => d.r + d.w > 0).reverse().map((d) => {
+      const pct = Math.round(d.r / (d.r + d.w) * 100);
+      return `<li><b>${dayLabel(d.date, today)}</b><span>${d.r} rätt · ${d.w} fel · ${pct} % · ${mins(d.ms)}${d.goal ? ' ✅' : ''}</span></li>`;
+    }).join('');
+    $('#level-list').innerHTML = LEVELS.map((l) => {
+      const n = data.perfect[l.id] || 0;
+      const crown = isCrowned(data, l.id);
+      return `<li><b>${l.icon} ${l.title} ${l.sub}</b><span>${starStr(data.best[l.id] || 0)}` +
+        (crown ? ' 👑' : n ? ` · ${n}/${CROWN_AT} mot 👑` : '') + '</span></li>';
+    }).join('');
+  }
+  $('#goal-seg').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-goal]');
+    if (!b) return;
+    data.goal = b.dataset.goal === 'off' ? { type: 'off', value: 0 } : fixGoal({ type: 'right', value: Number(b.dataset.goal) });
+    save(); renderAdult();
+  });
+
+  /* Spara / hämta som fil */
+  $('#backup-save').addEventListener('click', async () => {
+    const text = JSON.stringify(makeBackup(data), null, 1);
+    const name = 'julias-plusminus-' + todayStr() + '.json';
+    try {
+      const file = new File([text], name, { type: 'application/json' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Julias + och − – sparad data' });
+        return;
+      }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+    }
+    const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  });
+  $('#backup-load').addEventListener('click', () => $('#backup-file').click());
+  $('#backup-file').addEventListener('change', async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      const b = parseBackup(await f.text());
+      const stars = Object.values(b.best).reduce((t, n) => t + n, 0);
+      if (!confirm(`Hämta från filen?\n\n${stars} stjärnor, ${Object.keys(b.stickers).length} klistermärken, ` +
+        `${Object.keys(b.days).length} dagar.\n\nDet ersätter det som finns i appen nu.`)) return;
+      Object.assign(data, b);
+      data.daily = null;
+      save(); renderAdult();
+      alert('Klart! ⭐');
+    } catch (err) {
+      alert(err.message || 'Filen gick inte att läsa.');
+    }
   });
 
   /* Album */
@@ -493,8 +810,9 @@ if (typeof document !== 'undefined') {
     }).join('');
   }
   $('#reset').addEventListener('click', () => {
-    if (!confirm('Vill du ta bort alla stjärnor och klistermärken?')) return;
-    data.best = {}; data.stickers = {}; save(); renderAlbum();
+    if (!confirm('Vill du ta bort alla stjärnor, klistermärken, kronor och dag-för-dag?')) return;
+    Object.assign(data, { best: {}, stickers: {}, perfect: {}, days: {}, daily: null, goalDays: [], streakDays: [], bestStreak: 0 });
+    save(); renderAdult();
   });
 
   /* Konfetti */
@@ -551,8 +869,55 @@ if (typeof document !== 'undefined') {
     $('#install-help-ios').hidden = true;
   });
 
+  /* Statusrad längst ner: är appen uppdaterad? */
+  let pendingReload = false;
+  const stEl = $('#app-status');
+  function setUpdateStatus(state) {
+    stEl.textContent = {
+      checking: 'Söker efter uppdatering…',
+      ok: '✓ Appen är uppdaterad (v' + APP_VERSION + ')',
+      offline: 'Utan internet · v' + APP_VERSION + ' (appen fungerar ändå)',
+      updating: '🔄 Hämtar ny version…',
+      ready: '🔄 Ny version finns – tryck här',
+    }[state];
+    stEl.classList.toggle('ready', state === 'ready');
+    stEl.disabled = state !== 'ready';
+  }
+  stEl.addEventListener('click', () => location.reload());
+  setUpdateStatus(navigator.onLine === false ? 'offline' : 'checking');
+
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+    // Ny version installerad: ladda om en gång (inte mitt i en omgång, och inte vid allra första installationen)
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloaded) return;
+      if (document.querySelector('#view-play.active, #view-result.active')) { pendingReload = true; setUpdateStatus('ready'); return; }
+      reloaded = true;
+      location.reload();
+    });
+    async function checkUpdate(reg) {
+      if (pendingReload) return;
+      if (navigator.onLine === false) { setUpdateStatus('offline'); return; }
+      setUpdateStatus('checking');
+      try {
+        const res = await fetch('sw.js?x=' + Date.now(), { cache: 'no-store' });
+        const m = (await res.text()).match(/plusminus-v(\d+)/);
+        if (!m || m[1] === APP_VERSION) { setUpdateStatus('ok'); return; }
+        setUpdateStatus('updating');
+        if (reg) reg.update().catch(() => {});
+      } catch (e) { setUpdateStatus('offline'); }
+    }
+    let swReg = null;
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js')
+        .then((reg) => { swReg = reg; checkUpdate(reg); })
+        .catch(() => checkUpdate(null));
+    });
+    window.addEventListener('online', () => checkUpdate(swReg));
+    window.addEventListener('offline', () => { if (!pendingReload) setUpdateStatus('offline'); });
+  } else {
+    setUpdateStatus('ok');
   }
 
   renderHome();

@@ -4,12 +4,17 @@ En liten app (PWA) där barn övar plus och minus upp till 20. Den är gjord fö
 
 **Prova appen:** https://perkarom.github.io/plusminus/
 
-![Skärmbilder: startsidan, ett plustal med bilder, ett visat svar vid minus, tiokompisar, resultat med klistermärke och albumet](docs/skarmbilder.png)
+![Skärmbilder: startsidan med dagens mål, ett minustal med bilder, krona-pop-up, resultat med klistermärke, albumet och För vuxna](docs/skarmbilder.png)
 
 - 8 nivåer: plus/minus upp till 5, 10 och 20, tiokompisar och blandat.
 - Bilder att räkna på, i grupper om fem. De visas direkt på de lätta nivåerna och via 💡 annars.
-- Två försök per tal. Efter två fel visas svaret med bilder.
+- Två försök per tal. Efter två fel visas svaret med bilder, och samma tal kommer tillbaka senare i omgången.
 - Stjärnor per nivå och ett klistermärke efter varje omgång (album med 40 st).
+- **👑 Krona:** efter 3 omgångar med tre stjärnor på en nivå får den en krona. Appen föreslår då en svårare nivå (både i text och uppläst). Nivåer med krona räknas inte till dagens mål eller dagar i rad.
+- **🎯 Dagens mål:** ett antal rätt svar per dag (10, 20, 30 eller 50, förvalt 20). När målet nås kommer konfetti och "Hurra! Dagens mål är klart!".
+- **🔥 Dagar i rad:** dagar då målet nåtts, visas på startsidan. Utan mål räcker ett rätt svar om dagen.
+- **👨‍👩‍👧 För vuxna:** välja dagens mål, se dag för dag (staplar för 14 dagar och en lista), nivåerna med stjärnor och kronor, Så funkar det, spara och hämta allt som fil, och börja om.
+- Appen uppdaterar sig själv. Raden längst ner på startsidan visar om den är uppdaterad.
 - 🔈 läser upp talet på svenska med inspelade klipp (`audio/`, rösten sv-SE-SofieNeural via edge-tts). Klippen hämtas när talet visas. Saknas ett klipp används telefonens röst.
 
-Vanlig HTML/CSS/JS utan byggsteg. Höj `CACHE` i `sw.js` vid varje ny version.
+Vanlig HTML/CSS/JS utan byggsteg. Vid varje ny version: höj `CACHE` i `sw.js` och `APP_VERSION` i `app.js` till samma nummer.
