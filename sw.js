@@ -1,4 +1,4 @@
-const CACHE = 'plusminus-v13';
+const CACHE = 'plusminus-v14';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/apple-touch-icon.png', 'icons/icon-512.png', 'icons/maskable-512.png'];
 
@@ -18,8 +18,9 @@ self.addEventListener('fetch', (e) => {
   e.respondWith(
     fetch(e.request, { cache: 'no-cache' })
       .then((res) => {
-        if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); }
-        return res;
+        if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); return res; }
+        // Felsvar (t.ex. 404/502 när servern krånglar): visa den sparade versionen om den finns
+        return caches.match(e.request, { ignoreSearch: true }).then((hit) => hit || res);
       })
       .catch(() => caches.match(e.request, { ignoreSearch: true }))
   );
