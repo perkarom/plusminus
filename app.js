@@ -1,7 +1,7 @@
 'use strict';
 
 /* ---------- Nivåer och frågor (rena funktioner, testas med node) ---------- */
-const APP_VERSION = '10'; // höj tillsammans med CACHE i sw.js
+const APP_VERSION = '11'; // höj tillsammans med CACHE i sw.js
 // Nyheter som visas (och läses upp) en gång efter en uppdatering. say = text för ljudklippet audio/nyhet_<v>.mp3
 const NEWS = [
   { v: 5, items: ['🎯 Ett <b>mål</b> för varje dag', '🔥 Elden visar hur många <b>dagar i rad</b> du klarat målet',
@@ -269,6 +269,7 @@ if (typeof document !== 'undefined') {
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => document.querySelectorAll(s);
 
+  let pendingReload = false; // ny version kom under en omgång eller medan en ruta var öppen
   const STORE = 'julias-plusminus-v1';
   let data;
   try { data = JSON.parse(localStorage.getItem(STORE)); } catch (e) { data = null; }
@@ -934,7 +935,6 @@ if (typeof document !== 'undefined') {
   });
 
   /* Statusrad längst ner: är appen uppdaterad? */
-  let pendingReload = false;
   const stEl = $('#app-status');
   function setUpdateStatus(state) {
     stEl.textContent = {
@@ -951,29 +951,34 @@ if (typeof document !== 'undefined') {
   setUpdateStatus(navigator.onLine === false ? 'offline' : 'checking');
 
   if ('serviceWorker' in navigator) {
-    // Ny version installerad: ladda om en gång (inte mitt i en omgång, och inte vid allra första installationen)
+    // Ny version installerad: ladda om en gång (inte vid allra första installationen)
     const hadController = !!navigator.serviceWorker.controller;
     let reloaded = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!hadController || reloaded) return;
-      // Inte mitt i en omgång eller medan en ruta (t.ex. nyheterna) är öppen
-      if (document.querySelector('#view-play.active, #view-result.active') || !$('#modal').hidden) {
-        pendingReload = true; setUpdateStatus('ready'); return;
-      }
+    // Inte mitt i en omgång eller medan en ruta (t.ex. nyheterna) är öppen
+    const isBusy = () => !!document.querySelector('#view-play.active, #view-result.active') || !$('#modal').hidden;
+    function reloadWhenFree() {
+      if (reloaded) return;
+      if (isBusy()) { pendingReload = true; setUpdateStatus('ready'); return; }
       reloaded = true;
       location.reload();
-    });
+    }
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) reloadWhenFree(); });
+    // Jämför versionen på nätet med den som körs: vid start, när appen kommer fram igen och var 15:e minut
+    let lastCheck = 0, checking = false;
     async function checkUpdate(reg) {
-      if (pendingReload) return;
+      if (pendingReload || reloaded || checking) return;
       if (navigator.onLine === false) { setUpdateStatus('offline'); return; }
-      setUpdateStatus('checking');
+      if (!lastCheck) setUpdateStatus('checking');
+      lastCheck = Date.now(); checking = true;
       try {
         const res = await fetch('sw.js?x=' + Date.now(), { cache: 'no-store' });
         const m = (await res.text()).match(/plusminus-v(\d+)/);
         if (!m || m[1] === APP_VERSION) { setUpdateStatus('ok'); return; }
         setUpdateStatus('updating');
         if (reg) reg.update().catch(() => {});
-      } catch (e) { setUpdateStatus('offline'); }
+        // Normalt laddar controllerchange om; annars gör vi det själva
+        setTimeout(reloadWhenFree, reg ? 8000 : 0);
+      } catch (e) { setUpdateStatus('offline'); } finally { checking = false; }
     }
     let swReg = null;
     window.addEventListener('load', () => {
@@ -982,6 +987,10 @@ if (typeof document !== 'undefined') {
         .catch(() => checkUpdate(null));
     });
     window.addEventListener('online', () => checkUpdate(swReg));
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && Date.now() - lastCheck > 60000) checkUpdate(swReg);
+    });
+    setInterval(() => { if (!document.hidden) checkUpdate(swReg); }, 15 * 60000);
     window.addEventListener('offline', () => { if (!pendingReload) setUpdateStatus('offline'); });
   } else {
     setUpdateStatus('ok');
