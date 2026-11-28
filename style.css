@@ -257,6 +257,7 @@ button.sticker-big { background: none; display: block; margin: 0 auto; }
 .l-crown { position: absolute; top: 4px; right: 8px; font-size: 1.4rem; }
 .level { position: relative; }
 .level.crowned { filter: saturate(.75); }
+.l-prog { font-size: .85rem; font-weight: 900; letter-spacing: 2px; opacity: .8; }
 
 /* Statusrad */
 .app-status {

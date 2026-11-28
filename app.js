@@ -1,7 +1,7 @@
 'use strict';
 
 /* ---------- Nivåer och frågor (rena funktioner, testas med node) ---------- */
-const APP_VERSION = '14'; // höj tillsammans med CACHE i sw.js
+const APP_VERSION = '15'; // höj tillsammans med CACHE i sw.js
 // Nyheter som visas (och läses upp) en gång efter en uppdatering. say = text för ljudklippet audio/nyhet_<v>.mp3
 const NEWS = [
   { v: 5, items: ['🎯 Ett <b>mål</b> för varje dag', '🔥 Elden visar hur många <b>dagar i rad</b> du klarat målet',
@@ -14,6 +14,8 @@ const NEWS = [
     say: 'Alla dina klistermärken finns under den nya knappen på startsidan.' },
   { v: 13, items: ['🦩 Ett nytt djur: <b>flamingo</b>! Den finns som klistermärke och ibland när du räknar'],
     say: 'Ett nytt djur! En flamingo. Den finns som klistermärke, och ibland när du räknar.' },
+  { v: 15, items: ['👑 På varje knapp ser du hur nära <b>kronan</b> du är: <b>●●○</b>. Varje gång du får ⭐⭐⭐ fylls en prick!'],
+    say: 'Nu ser du hur nära kronan du är. Varje gång du får tre stjärnor fylls en prick. Tre prickar ger en krona!' },
 ];
 function newsFor(seen) { return NEWS.filter((n) => n.v > seen); }
 const ROUND_LEN = 10;
@@ -138,6 +140,12 @@ const PHRASES = {
 /* ---------- Kronor: en nivå man kan ---------- */
 const CROWN_AT = 3; // antal omgångar med 3 stjärnor
 function isCrowned(d, id) { return ((d.perfect && d.perfect[id]) || 0) >= CROWN_AT; }
+// Prickar mot kronan, t.ex. "●●○" (tom sträng när nivån redan har krona)
+function crownDots(d, id) {
+  if (isCrowned(d, id)) return '';
+  const n = (d.perfect && d.perfect[id]) || 0;
+  return '●'.repeat(n) + '○'.repeat(CROWN_AT - n);
+}
 // Nästa nivå i listan som inte har krona (för "prova något svårare")
 function harderLevel(d, id) {
   const i = LEVELS.findIndex((l) => l.id === id);
@@ -264,7 +272,7 @@ function parseBackup(text) {
 
 if (typeof module !== 'undefined') {
   module.exports = { LEVELS, STICKERS, PHRASES, PRAISE, allQuestions, buildRound, starsFor, nextSticker,
-    speakText, clipName, revealText, CROWN_AT, isCrowned, harderLevel, todayStr, prevDay, fixGoal, goalProgress,
+    speakText, clipName, revealText, CROWN_AT, isCrowned, crownDots, harderLevel, todayStr, prevDay, fixGoal, goalProgress,
     streakInfo, recordDaily, daySummary, makeBackup, parseBackup, NEWS, newsFor, APP_VERSION };
 }
 
@@ -454,6 +462,7 @@ if (typeof document !== 'undefined') {
         <span class="l-title">${l.title}</span>
         <span class="l-sub">${l.sub}</span>
         <span class="l-stars">${starStr(data.best[l.id] || 0)}</span>
+        ${crownDots(data, l.id) ? `<span class="l-prog" aria-label="${(data.perfect && data.perfect[l.id]) || 0} av ${CROWN_AT} mot kronan">👑 ${crownDots(data, l.id)}</span>` : ''}
       </button>`).join('');
     $('#sound-toggle').textContent = data.sound ? '🔊 Ljud på' : '🔇 Ljud av';
     $('#speak-toggle').textContent = data.speak ? '🗣️ Läs upp: på' : '🗣️ Läs upp: av';
